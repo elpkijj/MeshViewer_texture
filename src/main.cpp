@@ -8,6 +8,8 @@
 #include<glm/gtx/transform2.hpp>
 #include<glm/gtx/euler_angles.hpp>
 
+#include<glm/gtc/type_ptr.hpp>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
@@ -20,8 +22,12 @@
 #include "Geometry.h"
 #include "CObj.h"
 
+
+
 #include "Shader/ShaderSource.h"
 #include "Shader/ModelShader.h"
+#include "Shader/NormalTextureShader.h"
+#include "Shader/SkyboxShader.h"
 #include "Arcball/arcball.h"
 
 #include <cmath>  // 需要包含 cmath
@@ -31,18 +37,19 @@
 
 using namespace std;
 
+
 static void error_callback(int error, const char* description)
 {
     fprintf(stderr, "Error: %s\n", description);
 }
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn);
 void scroll_callback(GLFWwindow* window, double xposIn, double yposIn);
-
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 
 
 int Width = 700, Height = 700;
 GLFWwindow* window;
-GLuint vertex_shader, fragment_shader, shader, mshader;
+GLuint ballReflectionShader,vertex_shader, normalTextureShader, fragment_shader, shader, mshader, displacementShader, skyboxShader;
 //mvp位置，位置，颜色
 GLint mvp_location, vpos_location, vcol_location;
 GLint m_mvp_location, m_vpos_location, m_vcol_location, m_vnor_location;
@@ -117,6 +124,8 @@ void init_opengl()
     glfwMakeContextCurrent(window);
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
+    //防止放大窗口的时候报错
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
     gladLoadGL();
     glfwSwapInterval(1);
@@ -426,14 +435,179 @@ void drawNormalTexture()
 {
     //TODO:自行创建并编写shader，实现法线贴图效果
     //TIPS:Wall.h中存储了绘制矩形的相关数据
-    
+    GLuint VAO, VBO;
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
+
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(wall->vertices), wall->vertices, GL_STATIC_DRAW);
+
+    // 顶点位置属性
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // 法线属性
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    // 纹理坐标
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+
+    // 切线和副切线
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)(8 * sizeof(float)));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)(11 * sizeof(float)));
+    glEnableVertexAttribArray(4);
+
+    // 使用法线贴图着色器
+    glUseProgram(normalTextureShader);
+
+    // 绑定漫反射贴图
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, diffuseMap);
+    glUniform1i(glGetUniformLocation(normalTextureShader, "diffuseMap"), 0);
+
+    // 绑定法线贴图
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, normalMap);
+    glUniform1i(glGetUniformLocation(normalTextureShader, "normalMap"), 1);
+
+    // 设置光照信息
+    glm::vec3 lightPos(5.0f, 5.0f, 5.0f);  // 调整光源位置
+    glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);  // 调整光源强度
+    glUniform3fv(glGetUniformLocation(normalTextureShader, "lightPos"), 1, &lightPos[0]);
+    glUniform3fv(glGetUniformLocation(normalTextureShader, "viewPos"), 1, &cameraPos[0]);
+    glUniform3fv(glGetUniformLocation(normalTextureShader, "lightColor"), 1, &lightColor[0]);
+
+    // 设置 MVP 矩阵
+    glm::mat4 model = glm::mat4(1.0f);
+    model = trans * rotation * scale;
+    glm::mat4 view = glm::lookAt(cameraPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 projection = glm::perspective(glm::radians(60.0f), (float)Width / (float)Height, 0.1f, 100.0f);
+
+    glUniformMatrix4fv(glGetUniformLocation(normalTextureShader, "model"), 1, GL_FALSE, &model[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(normalTextureShader, "view"), 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(normalTextureShader, "projection"), 1, GL_FALSE, &projection[0][0]);
+
+    // 绘制 Wall
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    // 解绑 VAO 和 Program
+    glBindVertexArray(0);
+    glUseProgram(0);
 }
 
 void drawSkyBox()
 {
     //TODO:自行创建并编写shader，实现环境贴图效果
     //TIPS:ball.h中存储了绘制球体的数据，skybox.h中存储了实现天空盒相关数据
+    static unsigned int skyboxVAO = 0, skyboxVBO = 0;
 
+    // 初始化天空盒的 VAO 和 VBO（仅初始化一次）
+    if (skyboxVAO == 0)
+    {
+        glGenVertexArrays(1, &skyboxVAO);
+        glGenBuffers(1, &skyboxVBO);
+
+        glBindVertexArray(skyboxVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(skybox->vertices), &skybox->vertices, GL_STATIC_DRAW);
+
+        // 设置顶点属性指针
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+
+        glBindVertexArray(0);
+    }
+
+    // 绘制天空盒
+    glDepthFunc(GL_LEQUAL);  // 确保天空盒在背景上渲染
+
+    // 使用天空盒着色器
+    glUseProgram(skyboxShader);
+
+    // 获取投影和视图矩阵
+    glm::mat4 view = glm::mat4(glm::mat3(glm::lookAt(cameraPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f))));  // 去掉平移部分
+    glm::mat4 projection = glm::perspective(glm::radians(60.0f), (float)Width / (float)Height, 0.1f, 100.0f);
+
+    glUniformMatrix4fv(glGetUniformLocation(skyboxShader, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(skyboxShader, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+    // 绑定天空盒纹理
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+
+    // 绘制天空盒
+    glBindVertexArray(skyboxVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+
+    // 重置深度测试为标准模式
+    glDepthFunc(GL_LESS);
+
+    // 绘制反射球体
+    glUseProgram(ballReflectionShader);
+
+    // 设置球体的模型、视图和投影矩阵
+    glm::mat4 model = glm::mat4(1.0f);  // 初始化模型矩阵为单位矩阵
+
+    // 应用鼠标控制的平移、旋转和缩放
+    model = trans * rotation * scale;
+
+
+    view = glm::lookAt(cameraPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    glUniformMatrix4fv(glGetUniformLocation(ballReflectionShader, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(glGetUniformLocation(ballReflectionShader, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(ballReflectionShader, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+    // 传递摄像机位置
+    glUniform3fv(glGetUniformLocation(ballReflectionShader, "cameraPos"), 1, glm::value_ptr(cameraPos));
+
+    // 绑定天空盒作为立方体贴图
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+
+    // 初始化并绑定球体的 VAO、VBO、EBO
+    static bool ballInitialized = false;  // 用于确保球体数据只初始化一次
+    static unsigned int ballVAO, ballVBO, ballEBO;
+
+    if (!ballInitialized)
+    {
+        Ball ballInstance;  // 创建球体实例
+
+        glGenVertexArrays(1, &ballVAO);
+        glGenBuffers(1, &ballVBO);
+        glGenBuffers(1, &ballEBO);
+
+        glBindVertexArray(ballVAO);
+
+        // 将球体顶点数据上传到 VBO
+        glBindBuffer(GL_ARRAY_BUFFER, ballVBO);
+        glBufferData(GL_ARRAY_BUFFER, ballInstance.vertices.size() * sizeof(float), &ballInstance.vertices[0], GL_STATIC_DRAW);
+
+        // 将索引数据上传到 EBO
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ballEBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, ballInstance.indices.size() * sizeof(unsigned int), &ballInstance.indices[0], GL_STATIC_DRAW);
+
+        // 设置顶点属性
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)0);  // 顶点位置
+        glEnableVertexAttribArray(0);
+
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)(5 * sizeof(float)));  // 法线
+        glEnableVertexAttribArray(1);
+
+        glBindVertexArray(0);
+        ballInitialized = true;  // 标记球体已经初始化
+    }
+
+    // 绘制球体，确保索引数据被正确传递
+    glBindVertexArray(ballVAO);
+    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(ball->indices.size()), GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+    
 }
 
 void drawDisplacement()
@@ -451,12 +625,17 @@ int main(void)
 
     shader = compile_shader(vertex_shader_text,fragment_shader_text);
     mshader = compile_shader(mvertex_shader_text, mfragment_shader_text);
+    normalTextureShader = compile_shader(normal_texture_vertex_shader_text, normal_texture_fragment_shader_text);
+    skyboxShader = compile_shader(skybox_vertex_shader_text, skybox_fragment_shader_text);
+    ballReflectionShader = compile_shader(ball_reflection_vertex_shader_text, ball_reflection_fragment_shader_text);
 
     //TODO:载入需要的贴图
     //TIPS:使用loadTexture和loadCubemap函数
     //diffuseMap = loadTexture("../../../resources/textures/wall_diffuse.png");
     diffuseMap = loadTexture("../../../resources/textures/brickwall.jpg");
     //diffuseMap = loadTexture("../../../resources/textures/chess.jpeg");
+    normalMap = loadTexture("../../../resources/textures/brickwall_normal.jpg");
+    cubemapTexture = loadCubemap(skybox->faces);
 
     Init_imgui();
 
@@ -683,4 +862,8 @@ void scroll_callback(GLFWwindow* window, double xposIn, double yposIn)
     }
 
     scale = glm::scale(glm::vec3(scaleNum, scaleNum, scaleNum));
+}
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+    glViewport(0, 0, width, height);
 }
