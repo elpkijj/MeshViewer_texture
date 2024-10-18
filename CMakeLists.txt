@@ -31,7 +31,7 @@ add_executable(${PROJECT_NAME}
     thirdparty/imgui/imgui_draw.cpp
     thirdparty/imgui/imgui_tables.cpp
     thirdparty/imgui/imgui_widgets.cpp
-  "src/Shader/NormalTextureShader.h" "src/Shader/SkyboxShader.h")
+  "src/Shader/NormalTextureShader.h" "src/Shader/SkyboxShader.h" "src/Shader/DisplacementShader.h")
 
 target_link_libraries(${PROJECT_NAME} ${PROJECT_SOURCE_DIR}/lib/glfw3.lib)
 #target_link_libraries(${PROJECT_NAME} ${PROJECT_SOURCE_DIR}/lib/imgui.lib)

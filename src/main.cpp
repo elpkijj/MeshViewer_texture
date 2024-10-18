@@ -27,6 +27,7 @@
 #include "Shader/ShaderSource.h"
 #include "Shader/ModelShader.h"
 #include "Shader/NormalTextureShader.h"
+#include "Shader/DisplacementShader.h"
 #include "Shader/SkyboxShader.h"
 #include "Arcball/arcball.h"
 
@@ -614,8 +615,53 @@ void drawDisplacement()
 {
     //TODO:自行创建并编写shader，实现置换贴图效果
     //TIPS:ball.h中存储了绘制球体的数据
-    
+    // 使用置换贴图着色器
+    GLuint VAO, VBO, EBO;
 
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
+
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, ball->vertices.size() * sizeof(float), ball->vertices.data(), GL_STATIC_DRAW);
+
+    glGenBuffers(1, &EBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, ball->indices.size() * sizeof(unsigned int), ball->indices.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    glUseProgram(displacementShader);
+
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, displacementMap);
+    glUniform1i(glGetUniformLocation(displacementShader, "displacementMap"), 0);
+
+    float heightScale = 0.1f;
+    glUniform1f(glGetUniformLocation(displacementShader, "heightScale"), heightScale);
+
+    glm::mat4 view = glm::lookAt(cameraPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 projection = glm::perspective(glm::radians(60.0f), (float)Width / (float)Height, 0.1f, 100.0f);
+    glm::mat4 model = trans * rotation * scale;
+
+    glUniformMatrix4fv(glGetUniformLocation(displacementShader, "view"), 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(displacementShader, "projection"), 1, GL_FALSE, &projection[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(displacementShader, "model"), 1, GL_FALSE, &model[0][0]);
+
+    glDrawElements(GL_TRIANGLES, ball->indices.size(), GL_UNSIGNED_INT, 0);
+
+    // Unbind textures
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+    // Unbind VAO
+    glBindVertexArray(0);
+    glUseProgram(0);
 }
 
 
@@ -628,6 +674,7 @@ int main(void)
     normalTextureShader = compile_shader(normal_texture_vertex_shader_text, normal_texture_fragment_shader_text);
     skyboxShader = compile_shader(skybox_vertex_shader_text, skybox_fragment_shader_text);
     ballReflectionShader = compile_shader(ball_reflection_vertex_shader_text, ball_reflection_fragment_shader_text);
+    displacementShader = compile_shader(displacement_vertex_shader_text, displacement_fragment_shader_text);
 
     //TODO:载入需要的贴图
     //TIPS:使用loadTexture和loadCubemap函数
@@ -635,6 +682,7 @@ int main(void)
     diffuseMap = loadTexture("../../../resources/textures/brickwall.jpg");
     //diffuseMap = loadTexture("../../../resources/textures/chess.jpeg");
     normalMap = loadTexture("../../../resources/textures/brickwall_normal.jpg");
+    displacementMap = loadTexture("../../../resources/textures/Ground054_1K-JPG/Ground054_1K-JPG_Displacement.jpg");
     cubemapTexture = loadCubemap(skybox->faces);
 
     Init_imgui();
