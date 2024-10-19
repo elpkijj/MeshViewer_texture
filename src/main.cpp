@@ -497,6 +497,7 @@ void drawNormalTexture()
 
     // 解绑 VAO 和 Program
     glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     glUseProgram(0);
 }
 
@@ -607,8 +608,10 @@ void drawSkyBox()
     // 绘制球体，确保索引数据被正确传递
     glBindVertexArray(ballVAO);
     glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(ball->indices.size()), GL_UNSIGNED_INT, 0);
+    // 解绑 VAO 和 Program
     glBindVertexArray(0);
-    
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glUseProgram(0);
 }
 
 void drawDisplacement()
@@ -659,8 +662,9 @@ void drawDisplacement()
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 
-    // Unbind VAO
+    // 解绑 VAO 和 Program
     glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     glUseProgram(0);
 }
 
