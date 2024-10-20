@@ -28,15 +28,25 @@ static const char* displacement_fragment_shader_text =
 "#version 330 core\n"
 "in vec2 TexCoords;\n"
 
-"uniform sampler2D textureMap;\n"  // 用于采样颜色的纹理
+"uniform sampler2D textureMap;\n"
+"uniform sampler2D ambientMap;\n" // 环境光遮蔽贴图
+"uniform sampler2D roughnessMap;\n" // 粗糙度贴图
 
 "out vec4 FragColor;\n"
 
 "void main()\n"
 "{\n"
-"    // 从纹理中获取颜色值\n"
 "    vec3 color = texture(textureMap, TexCoords).rgb;\n"
-"    FragColor = vec4(color, 1.0);\n"
+"    float ambientOcclusion = texture(ambientMap, TexCoords).r;\n"
+"    float roughness = texture(roughnessMap, TexCoords).r;\n"
+
+"    // 应用环境光遮蔽对颜色进行调整\n"
+"    color *= ambientOcclusion;\n"
+
+"    // 基于粗糙度对光照效果进行调整（假设使用简单的粗糙度调整）\n"
+"    vec3 finalColor = mix(color * 0.5, color, roughness);\n"
+
+"    FragColor = vec4(finalColor, 1.0);\n"
 "}\n";
 
 #endif // DISPLACEMENT_SHADER_H
