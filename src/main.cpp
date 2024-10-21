@@ -645,7 +645,12 @@ void drawDisplacement()
     glBindTexture(GL_TEXTURE_2D, displacementMap);
     glUniform1i(glGetUniformLocation(displacementShader, "displacementMap"), 0);
 
-    float heightScale = 0.1f;
+    // 绑定颜色纹理
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, colorMap);
+    glUniform1i(glGetUniformLocation(displacementShader, "textureMap"), 1);
+
+    float heightScale = 1.0f;
     glUniform1f(glGetUniformLocation(displacementShader, "heightScale"), heightScale);
 
     glm::mat4 view = glm::lookAt(cameraPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
