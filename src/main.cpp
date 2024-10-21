@@ -56,7 +56,7 @@ GLint mvp_location, vpos_location, vcol_location;
 GLint m_mvp_location, m_vpos_location, m_vcol_location, m_vnor_location;
 //环境光，镜面光，漫反射光，光源方向，摄像机位置，模型矩阵位置
 GLint light_ambient,light_specular,light_diffuse, light_dir, viewPos, m_model_location;
-GLuint diffuseMap, normalMap, displacementMap, cubemapTexture;
+GLuint diffuseMap, normalMap, displacementMap, cubemapTexture, colorMap, ambientMap, RoughnessMap;
 
 glm::vec3* pos;
 glm::vec4* color;
@@ -618,7 +618,6 @@ void drawDisplacement()
 {
     //TODO:自行创建并编写shader，实现置换贴图效果
     //TIPS:ball.h中存储了绘制球体的数据
-    // 使用置换贴图着色器
     GLuint VAO, VBO, EBO;
 
     glGenVertexArrays(1, &VAO);
@@ -640,7 +639,7 @@ void drawDisplacement()
 
     glUseProgram(displacementShader);
 
-    
+    // 绑定置换贴图
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, displacementMap);
     glUniform1i(glGetUniformLocation(displacementShader, "displacementMap"), 0);
@@ -649,6 +648,16 @@ void drawDisplacement()
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, colorMap);
     glUniform1i(glGetUniformLocation(displacementShader, "textureMap"), 1);
+
+    // 绑定环境光遮蔽贴图
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, ambientMap);
+    glUniform1i(glGetUniformLocation(displacementShader, "ambientMap"), 2);
+
+    // 绑定粗糙度贴图
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, RoughnessMap);
+    glUniform1i(glGetUniformLocation(displacementShader, "roughnessMap"), 3);
 
     float heightScale = 1.0f;
     glUniform1f(glGetUniformLocation(displacementShader, "heightScale"), heightScale);
@@ -684,6 +693,7 @@ int main(void)
     skyboxShader = compile_shader(skybox_vertex_shader_text, skybox_fragment_shader_text);
     ballReflectionShader = compile_shader(ball_reflection_vertex_shader_text, ball_reflection_fragment_shader_text);
     displacementShader = compile_shader(displacement_vertex_shader_text, displacement_fragment_shader_text);
+   
 
     //TODO:载入需要的贴图
     //TIPS:使用loadTexture和loadCubemap函数
@@ -691,8 +701,11 @@ int main(void)
     diffuseMap = loadTexture("../../../resources/textures/brickwall.jpg");
     //diffuseMap = loadTexture("../../../resources/textures/chess.jpeg");
     normalMap = loadTexture("../../../resources/textures/brickwall_normal.jpg");
+    colorMap= loadTexture("../../../resources/textures/Ground_Color.jpg");
     displacementMap = loadTexture("../../../resources/textures/Ground054_1K-JPG/Ground054_1K-JPG_Displacement.jpg");
     cubemapTexture = loadCubemap(skybox->faces);
+    ambientMap = loadTexture("../../../resources/textures/Ground054_1K-JPG/Ground054_1K-JPG_AmbientOcclusion.jpg");
+    RoughnessMap = loadTexture("../../../resources/textures/Ground054_1K-JPG/Ground054_1K-JPG_Roughness.jpg");
 
     Init_imgui();
 
